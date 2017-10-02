@@ -9,7 +9,7 @@ from django.utils import importlib
 from django.utils.module_loading import module_has_submodule
 from haystack.constants import Indexable, DEFAULT_ALIAS
 from haystack.exceptions import NotHandled, SearchFieldError
-
+from django.apps import apps
 
 def import_class(path):
     path_bits = path.split('.')
@@ -158,15 +158,12 @@ class UnifiedIndex(object):
     def collect_indexes(self):
         indexes = []
 
-        for app in settings.INSTALLED_APPS:
-            try:
-                mod = importlib.import_module(app)
-            except ImportError:
-                warnings.warn('Installed app %s is not an importable Python module and will be ignored' % app)
-                continue
+        for app_config in apps.get_app_configs():
+
+            mod = app_config.module
 
             try:
-                search_index_module = importlib.import_module("%s.search_indexes" % app)
+                search_index_module = importlib.import_module("%s.search_indexes" % mod.__name__)  
             except ImportError:
                 if module_has_submodule(mod, 'search_indexes'):
                     raise
@@ -176,7 +173,7 @@ class UnifiedIndex(object):
             for item_name, item in inspect.getmembers(search_index_module, inspect.isclass):
                 if getattr(item, 'haystack_use_for_indexing', False) and getattr(item, 'get_model', None):
                     # We've got an index. Check if we should be ignoring it.
-                    class_path = "%s.search_indexes.%s" % (app, item_name)
+                    class_path = "%s.search_indexes.%s" % (mod.__name__, item_name)
 
                     if class_path in self.excluded_indexes or self.excluded_indexes_ids.get(item_name) == id(item):
                         self.excluded_indexes_ids[str(item_name)] = id(item)
